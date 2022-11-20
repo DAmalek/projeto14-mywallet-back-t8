@@ -4,6 +4,7 @@ import { MongoClient } from "mongodb";
 import dotenv from "dotenv";
 import bcrypt from "bcrypt";
 import joi from "joi";
+import { v4 as uuidV4} from "uuid";
 
 const userSchema = joi.object({
   nome: joi.string().required().min(3).max(100),
@@ -49,7 +50,43 @@ app.post("/sign-up", async (req, res) => {
     await userCollection.insertOne({ ...user, senha: hashPassword });
     res.sendStatus(201);
   } catch (err) {
-    res.sendStatus(500)
+    res.sendStatus(500);
+  }
+});
+
+app.post("/sign-in", async (req, res) => {
+  const { email, senha } = req.body;
+
+  const token = uuidV4()
+
+  try {
+    const userExists = await userCollection.findOne({ email });
+    if (!userExists) {
+      return res.sendStatus(401);
+    }
+    
+    const senhaOk = bcrypt.compareSync(senha, userExists.senha);
+    
+    if (!senhaOk) {
+        return res.sendStatus(401);
+    }
+
+    const userSession = await db.collection('sessions').findOne({ userId: userExists._id});
+
+    if (userSession) {
+        return res.status(401).send({ message: 'vc ja ta logado, relogue' })
+    }
+
+    await db.collection('sessions').insertOne({ 
+        token,
+        userId: userExists._id,
+    })
+
+    res.send({ token });
+
+  } catch (err) {
+    console.log(err);
+    res.sendStatus(500);
   }
 });
 
